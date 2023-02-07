@@ -1,6 +1,7 @@
 import { createInterface } from "readline";
 import { doMetaCommand, prepareStatement, Statement } from "./commands";
 import { executeStatement } from "./virtualMachine";
+import { Table } from "./table";
 
 const rl = createInterface({
   input: process.stdin,
@@ -10,6 +11,7 @@ const rl = createInterface({
 const readline = (prompt = "db> ") => new Promise<string>((resolve) => rl.question(prompt, resolve));
 
 async function main() {
+  const table = new Table();
   while (true) {
     let input = (await readline()).trim();
 
@@ -36,7 +38,7 @@ async function main() {
       continue;
     }
 
-    executeStatement(statement);
+    executeStatement(statement, table);
     console.log("Executed.");
   }
 }

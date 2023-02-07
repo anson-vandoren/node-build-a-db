@@ -1,11 +1,14 @@
+import { Row } from "./row";
+
 export enum StatementType {
   STATEMENT_INSERT,
   STATEMENT_SELECT,
-};
+}
 
 export interface Statement {
   type: StatementType;
-};
+  rowToInsert?: Row;
+}
 
 export function doMetaCommand(command: string): void {
   if (command === ".exit") {
@@ -16,13 +19,20 @@ export function doMetaCommand(command: string): void {
 }
 
 export function prepareStatement(command: string): Statement {
-  if (command.startsWith("insert")) {
+  const tokens = command.split(" ");
+  if (tokens[0] === "insert") {
+    if (tokens.length !== 4) {
+      throw new Error("Syntax error. Usage: insert <id> <username> <email>");
+    }
+    const [ _cmd, id, username, email ] = tokens;
+    const row = new Row(id, username, email);
     return {
       type: StatementType.STATEMENT_INSERT,
+      rowToInsert: row,
     };
   }
 
-  if (command.startsWith("select")) {
+  if (tokens[0] === "select") {
     return {
       type: StatementType.STATEMENT_SELECT,
     };
