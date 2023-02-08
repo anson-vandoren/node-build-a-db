@@ -1,38 +1,48 @@
 import { Table } from './table';
-import { ROW_SIZE } from './row';
-import { ROWS_PER_PAGE } from './table';
+import { LeafNode } from './node';
 
 export class Cursor {
   private table: Table;
-  private rowNum: number;
+  private pageNum: number;
+  public cellNum: number;
   public endOfTable: boolean;
 
-  constructor(table: Table, rowNum: number) {
+  constructor(table: Table, pageNum: number, cellNum: number, endOfTable: boolean) {
     this.table = table;
-    this.rowNum = rowNum;
-    this.endOfTable = rowNum >= table.numRows;
+    this.pageNum = pageNum;
+    this.cellNum = cellNum;
+    this.endOfTable = endOfTable;
   }
 
   public value(): { page: Buffer, offset: number } {
-    const pageNum = Math.floor(this.rowNum / ROWS_PER_PAGE);
-    let page = this.table.pager.getPage(pageNum);
-    const rowOffset = this.rowNum % ROWS_PER_PAGE;
-    const byteOffset = rowOffset * ROW_SIZE;
-    return { page, offset: byteOffset };
+    let page = this.table.pager.getPage(this.pageNum);
+    const node = new LeafNode(page);
+    const offset = node.getValueOffset(this.cellNum)
+    return { page, offset };
   }
   
   public advance(): void {
-    this.rowNum += 1;
-    if (this.rowNum >= this.table.numRows) {
+    const node = this.table.pager.getLeafNode(this.pageNum);
+    this.cellNum += 1;
+    if (this.cellNum >= node.numCells) {
       this.endOfTable = true;
     }
   }
 
   public static fromStart(table: Table): Cursor {
-    return new Cursor(table, 0);
+    const pageNum = table.rootPageNum;
+    const cellNum = 0;
+
+    const rootNode = new LeafNode(table.pager.getPage(pageNum));
+    const numCells = rootNode.numCells;
+    const endOfTable = numCells === 0;
+    return new Cursor(table, pageNum, cellNum, endOfTable);
   }
 
   public static fromEnd(table: Table): Cursor {
-    return new Cursor(table, table.numRows);
+    const pageNum = table.rootPageNum;
+    const rootNode = table.pager.getLeafNode(pageNum);
+    const numCells = rootNode.numCells;
+    return new Cursor(table, pageNum, numCells, true);
   }
 }

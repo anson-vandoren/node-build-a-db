@@ -1,36 +1,39 @@
-import fs from 'fs';
-
-import { ROW_SIZE } from './row';
-import { TABLE_MAX_PAGES } from './table';
+import fs from "fs";
+import { LeafNode } from "./node";
+import { Table } from "./table";
 
 export const PAGE_SIZE = 4096;
 
 export class Pager {
   private fileDescriptor: number;
   private fileLength: number;
-  public numRows: number;
   private pages: Buffer[] = [];
+  private numPages: number;
 
   constructor(filename: string) {
     let size: number;
     try {
-      this.fileDescriptor = fs.openSync(filename, 'r+');
+      this.fileDescriptor = fs.openSync(filename, "r+");
       size = fs.fstatSync(this.fileDescriptor).size;
     } catch (e: any) {
-      if (e.code === 'ENOENT') {
-        this.fileDescriptor = fs.openSync(filename, 'w+');
+      if (e.code === "ENOENT") {
+        this.fileDescriptor = fs.openSync(filename, "w+");
         size = 0;
       } else {
         throw e;
       }
     }
-    this.numRows = Math.floor(size / ROW_SIZE);
     this.fileLength = size;
+    this.numPages = Math.floor(size / PAGE_SIZE);
+    if (size % PAGE_SIZE) {
+      throw new Error(`DB file is not a whole number of pages. Corrupt file.`);
+    }
   }
 
   public getPage(pageNum: number): Buffer {
-    if (pageNum > TABLE_MAX_PAGES) {
-      throw new Error(`OOB page number ${pageNum}: max ${TABLE_MAX_PAGES}`);
+    const maxPages = Table.MAX_PAGES;
+    if (pageNum > maxPages) {
+      throw new Error(`OOB page number ${pageNum}: max ${maxPages}`);
     }
     if (!this.pages[pageNum]) {
       const page = Buffer.alloc(PAGE_SIZE);
@@ -43,37 +46,33 @@ export class Pager {
 
       if (pageNum <= numPages) {
         const offset = pageNum * PAGE_SIZE;
-        const bytesRead = fs.readSync(
-          this.fileDescriptor,
-          page,
-          0,
-          PAGE_SIZE,
-          offset
-        );
+        const bytesRead = fs.readSync(this.fileDescriptor, page, 0, PAGE_SIZE, offset);
         if (bytesRead < 0) {
           throw new Error(`Error reading file: ${bytesRead}`);
         }
       }
       this.pages[pageNum] = page;
+      if (pageNum >= this.numPages) {
+        this.numPages = pageNum + 1;
+      }
     }
     return this.pages[pageNum];
   }
 
-  public close(numFullPages: number): void {
-    for (let i = 0; i < numFullPages; i++) {
-      this.flushPage(i, PAGE_SIZE);
-    }
+  public getLeafNode(pageNum: number): LeafNode {
+    return new LeafNode(this.getPage(pageNum));
+  }
 
-    const numAdditionalRows = this.numRows % TABLE_MAX_PAGES;
-    if (numAdditionalRows > 0) {
-      this.flushPage(numFullPages, numAdditionalRows * ROW_SIZE);
+  public close(): void {
+    for (let i = 0; i < this.numPages; i++) {
+      this.flushPage(i);
     }
 
     fs.closeSync(this.fileDescriptor);
     this.pages = [];
   }
 
-  private flushPage(pageNum: number, size: number): void {
+  private flushPage(pageNum: number): void {
     if (!this.pages[pageNum]) {
       return;
     }
@@ -82,7 +81,7 @@ export class Pager {
       this.fileDescriptor,
       this.pages[pageNum],
       0,
-      size,
+      PAGE_SIZE,
       offset
     );
     if (bytesWritten < 0) {

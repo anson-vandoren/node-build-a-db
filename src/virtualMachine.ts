@@ -1,7 +1,8 @@
 import { Statement, StatementType } from "./commands";
 import { Row } from "./row";
-import { Table, TABLE_MAX_ROWS } from "./table";
+import { Table } from "./table";
 import { Cursor } from "./cursor";
+import { LeafNode } from "./node";
 
 export function executeStatement(statement: Statement, table: Table): void {
   switch (statement.type) {
@@ -18,15 +19,14 @@ function executeInsert(statement: Statement, table: Table): void {
   if (!statement.rowToInsert) {
     throw new Error("No row to insert");
   }
-  if (table.numRows >= TABLE_MAX_ROWS) {
+  const node = table.pager.getLeafNode(table.rootPageNum);
+  if (node.numCells >= LeafNode.MAX_CELLS) {
     console.log("Error: Table full.");
     return;
   }
   const rowToInsert = statement.rowToInsert;
   const cursor = Cursor.fromEnd(table);
-  const { page, offset } = cursor.value();
-  rowToInsert.serialize(page, offset);
-  table.numRows += 1;
+  node.insert(cursor, rowToInsert.id, rowToInsert);
 }
 
 function executeSelect(_statement: Statement, table: Table): void {
@@ -34,7 +34,7 @@ function executeSelect(_statement: Statement, table: Table): void {
   while (!cursor.endOfTable) {
     const { page, offset } = cursor.value();
     const row = Row.deserialize(page, offset);
-    console.log(row.toString());
     cursor.advance();
+    console.log(row.toString());
   }
 }

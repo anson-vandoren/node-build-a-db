@@ -50,15 +50,15 @@ export class Row {
   }
 
   public serialize(destination: Buffer, offset: number): void {
-    destination.writeInt32LE(this.id, offset + ID_OFFSET);
+    destination.writeInt32BE(this.id, offset + ID_OFFSET);
     offset += ID_SIZE;
-    destination.write(this.username, offset + USERNAME_OFFSET, COLUMN_USERNAME_SIZE, "ascii");
+    destination.write(this.username, offset, COLUMN_USERNAME_SIZE, "ascii");
     offset += COLUMN_USERNAME_SIZE;
-    destination.write(this.email, offset + EMAIL_OFFSET, COLUMN_EMAIL_SIZE, "ascii");
+    destination.write(this.email, offset, COLUMN_EMAIL_SIZE, "ascii");
   }
 
   public static deserialize(buffer: Buffer, offset: number): Row {
-    const id = buffer.readInt32LE(offset + ID_OFFSET);
+    const id = buffer.readInt32BE(offset + ID_OFFSET);
     offset += ID_SIZE;
     const username = buffer.toString("ascii", offset, offset + COLUMN_USERNAME_SIZE);
     offset += COLUMN_USERNAME_SIZE;
