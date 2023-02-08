@@ -1,26 +1,33 @@
-import { createInterface } from "readline";
-import { doMetaCommand, prepareStatement, Statement } from "./commands";
-import { executeStatement } from "./virtualMachine";
-import { Table } from "./table";
+import { createInterface } from 'readline';
+import { doMetaCommand, prepareStatement, Statement } from './commands';
+import { executeStatement } from './virtualMachine';
+import { Database } from './database';
 
 const rl = createInterface({
   input: process.stdin,
   output: process.stdout,
 });
 
-const readline = (prompt = "db> ") => new Promise<string>((resolve) => rl.question(prompt, resolve));
+const readline = (prompt = 'db> ') => new Promise<string>((resolve) => rl.question(prompt, resolve));
+
 
 async function main() {
-  const table = new Table();
+  const dbFile = process.argv[2];
+  const db = new Database(dbFile);
+  process.on('SIGINT', () => {
+    db.close();
+    process.exit(0);
+  });
+
   while (true) {
     let input = (await readline()).trim();
 
     // check for metacommands first
-    if (input.startsWith(".")) {
+    if (input.startsWith('.')) {
       try {
-        doMetaCommand(input);
+        doMetaCommand(input, db);
       } catch (e) {
-        console.log('Unrecognized command "' + input + '".');
+        console.log(`Unrecognized command ${input}.`);
         // TODO: show where the error is
         continue;
       }
@@ -33,13 +40,13 @@ async function main() {
       if (e instanceof Error) {
         console.log(e.message);
       } else {
-        console.log("Unknown error");
+        console.log('Unknown error');
       }
       continue;
     }
 
-    executeStatement(statement, table);
-    console.log("Executed.");
+    executeStatement(statement, db.table);
+    console.log('Executed.');
   }
 }
 

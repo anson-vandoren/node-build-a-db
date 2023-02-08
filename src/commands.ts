@@ -1,4 +1,5 @@
 import { Row } from "./row";
+import { Database } from "./database";
 
 export enum StatementType {
   STATEMENT_INSERT,
@@ -10,8 +11,9 @@ export interface Statement {
   rowToInsert?: Row;
 }
 
-export function doMetaCommand(command: string): void {
+export function doMetaCommand(command: string, db: Database): void {
   if (command === ".exit") {
+    db.close();
     process.exit(0);
   } else {
     throw new Error("Unrecognized command '" + command + "'.");

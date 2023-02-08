@@ -1,6 +1,7 @@
 import { Statement, StatementType } from "./commands";
 import { Row } from "./row";
 import { Table, TABLE_MAX_ROWS } from "./table";
+import { Cursor } from "./cursor";
 
 export function executeStatement(statement: Statement, table: Table): void {
   switch (statement.type) {
@@ -22,15 +23,18 @@ function executeInsert(statement: Statement, table: Table): void {
     return;
   }
   const rowToInsert = statement.rowToInsert;
-  const { page, offset } = table.rowSlot(table.numRows);
+  const cursor = Cursor.fromEnd(table);
+  const { page, offset } = cursor.value();
   rowToInsert.serialize(page, offset);
   table.numRows += 1;
 }
 
 function executeSelect(_statement: Statement, table: Table): void {
-  for (let i = 0; i < table.numRows; i++) {
-    const { page, offset } = table.rowSlot(i);
+  const cursor = Cursor.fromStart(table);
+  while (!cursor.endOfTable) {
+    const { page, offset } = cursor.value();
     const row = Row.deserialize(page, offset);
     console.log(row.toString());
+    cursor.advance();
   }
 }

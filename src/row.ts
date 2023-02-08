@@ -60,9 +60,9 @@ export class Row {
   public static deserialize(buffer: Buffer, offset: number): Row {
     const id = buffer.readInt32LE(offset + ID_OFFSET);
     offset += ID_SIZE;
-    const username = buffer.toString("ascii", offset + USERNAME_OFFSET, offset + USERNAME_OFFSET + COLUMN_USERNAME_SIZE);
+    const username = buffer.toString("ascii", offset, offset + COLUMN_USERNAME_SIZE);
     offset += COLUMN_USERNAME_SIZE;
-    const email = buffer.toString("ascii", offset + EMAIL_OFFSET, offset + EMAIL_OFFSET + COLUMN_EMAIL_SIZE);
+    const email = buffer.toString("ascii", offset, offset + COLUMN_EMAIL_SIZE);
     return new Row(id, username, email);
   }
 
