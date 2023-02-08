@@ -127,11 +127,9 @@ export class LeafNode extends Node {
   }
 
   public find(cursor: Cursor, key: number): Cursor {
-    const numCells = this.numCells;
-
     // binary search
     let minIndex = 0;
-    let onePastMaxIndex = numCells;
+    let onePastMaxIndex = this.numCells;
     while (onePastMaxIndex !== minIndex) {
       const index = Math.floor((onePastMaxIndex + minIndex) / 2);
       const keyAtIndex = this.getKey(index);

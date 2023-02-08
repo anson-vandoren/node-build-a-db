@@ -4,13 +4,23 @@ import { LeafNode, NodeType } from "./node";
 export class Cursor {
   private table: Table;
   private pageNum: number;
-  public cellNum: number;
+  private _cellNum: number;
   public endOfTable: boolean;
+
+  public get cellNum(): number {
+    return this._cellNum;
+  }
+
+  public set cellNum(cellNum: number) {
+    this._cellNum = cellNum;
+    const node = this.table.pager.getLeafNode(this.pageNum);
+    this.endOfTable = cellNum >= node.numCells;
+  }
 
   constructor(table: Table, pageNum: number, cellNum: number, endOfTable = false) {
     this.table = table;
     this.pageNum = pageNum;
-    this.cellNum = cellNum;
+    this._cellNum = cellNum;
     this.endOfTable = endOfTable;
   }
 
