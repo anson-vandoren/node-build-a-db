@@ -8,7 +8,7 @@ export class Pager {
   private fileDescriptor: number;
   private fileLength: number;
   private pages: Buffer[] = [];
-  private numPages: number;
+  public numPages: number;
 
   constructor(filename: string) {
     let size: number;

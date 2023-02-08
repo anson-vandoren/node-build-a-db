@@ -20,12 +20,23 @@ function executeInsert(statement: Statement, table: Table): void {
     throw new Error("No row to insert");
   }
   const node = table.pager.getLeafNode(table.rootPageNum);
-  if (node.numCells >= LeafNode.MAX_CELLS) {
+  const numCells = node.numCells;
+  if (numCells >= LeafNode.MAX_CELLS) {
     console.log("Error: Table full.");
     return;
   }
   const rowToInsert = statement.rowToInsert;
-  const cursor = Cursor.fromEnd(table);
+  const keyToInsert = rowToInsert.id;
+  const cursor = Cursor.tableFind(table, keyToInsert);
+
+  if (cursor.cellNum < numCells) {
+    const keyAtIndex = node.getKey(cursor.cellNum);
+    if (keyAtIndex === keyToInsert) {
+      console.log("Error: Duplicate key.");
+      return;
+    }
+  }
+
   node.insert(cursor, rowToInsert.id, rowToInsert);
 }
 

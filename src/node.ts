@@ -1,6 +1,7 @@
 import { PAGE_SIZE } from "./pager";
 import { ROW_SIZE, Row } from "./row";
 import { Cursor } from "./cursor";
+import { Table } from "./table";
 
 
 export enum NodeType {
@@ -81,6 +82,11 @@ export class LeafNode extends Node {
     this.page.writeUInt32BE(numCells, LEAF_NODE_NUM_CELLS_OFFSET);
   }
 
+  public initializeRoot(): void {
+    this.numCells = 0;
+    this.nodeType = NodeType.LEAF;
+  }
+
   public getCellOffset(cellNum: number): number {
     const offset = LEAF_NODE_HEADER_SIZE + cellNum * LEAF_NODE_CELL_SIZE;
     return offset;
@@ -88,6 +94,10 @@ export class LeafNode extends Node {
 
   public getKeyOffset(cellNum: number): number {
     return this.getCellOffset(cellNum);
+  }
+
+  public getKey(cellNum: number): number {
+    return this.page.readUInt32BE(this.getKeyOffset(cellNum));
   }
 
   private setKey(cellNum: number, key: number): void {
@@ -116,5 +126,27 @@ export class LeafNode extends Node {
     row.serialize(this.page, rowOffset);
   }
 
+  public find(cursor: Cursor, key: number): Cursor {
+    const numCells = this.numCells;
+
+    // binary search
+    let minIndex = 0;
+    let onePastMaxIndex = numCells;
+    while (onePastMaxIndex !== minIndex) {
+      const index = Math.floor((onePastMaxIndex + minIndex) / 2);
+      const keyAtIndex = this.getKey(index);
+      if (key === keyAtIndex) {
+        cursor.cellNum = index;
+        return cursor;
+      }
+      if (key < keyAtIndex) {
+        onePastMaxIndex = index;
+      } else {
+        minIndex = index + 1;
+      }
+    }
+    cursor.cellNum = minIndex;
+    return cursor;
+  }
 }
 

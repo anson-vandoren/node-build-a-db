@@ -14,6 +14,11 @@ export class Table {
   constructor(pager: Pager) { 
     this.pager = pager;
     this.rootPageNum = 0;
+
+    if (this.pager.numPages === 0) {
+      const rootNode = this.pager.getLeafNode(0);
+      rootNode.initializeRoot();
+    }
   }
 
   public close(): void {
