@@ -21,10 +21,7 @@ function executeInsert(statement: Statement, table: Table): void {
   }
   const node = table.pager.getLeafNode(table.rootPageNum);
   const numCells = node.numCells;
-  if (numCells >= LeafNode.MAX_CELLS) {
-    console.log("Error: Table full.");
-    return;
-  }
+
   const rowToInsert = statement.rowToInsert;
   const keyToInsert = rowToInsert.id;
   const cursor = Cursor.tableFind(table, keyToInsert);

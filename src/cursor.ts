@@ -1,8 +1,8 @@
 import { Table } from "./table";
-import { LeafNode, NodeType } from "./node";
+import { LeafNode, NodeType, Node } from "./node";
 
 export class Cursor {
-  private table: Table;
+  public table: Table;
   private pageNum: number;
   private _cellNum: number;
   public endOfTable: boolean;
@@ -28,6 +28,7 @@ export class Cursor {
     let page = this.table.pager.getPage(this.pageNum);
     const node = new LeafNode(page);
     const offset = node.getValueOffset(this.cellNum);
+    // TODO: refactor this so callers don't need a page and offset
     return { page, offset };
   }
 
@@ -43,9 +44,13 @@ export class Cursor {
     const pageNum = table.rootPageNum;
     const cellNum = 0;
 
-    const rootNode = new LeafNode(table.pager.getPage(pageNum));
-    const numCells = rootNode.numCells;
-    const endOfTable = numCells === 0;
+    let endOfTable = false;
+    const rootPage = table.pager.getPage(pageNum);
+    if (Node.nodeType(rootPage) === NodeType.LEAF) {
+      const rootNode = table.pager.getLeafNode(pageNum);
+      const numCells = rootNode.numCells;
+      endOfTable = numCells === 0;
+    }
     return new Cursor(table, pageNum, cellNum, endOfTable);
   }
 

@@ -1,5 +1,5 @@
 import fs from "fs";
-import { LeafNode } from "./node";
+import { InternalNode, LeafNode, Node } from "./node";
 import { Table } from "./table";
 
 export const PAGE_SIZE = 4096;
@@ -59,8 +59,21 @@ export class Pager {
     return this.pages[pageNum];
   }
 
-  public getLeafNode(pageNum: number): LeafNode {
-    return new LeafNode(this.getPage(pageNum));
+  public getLeafNode(pageNum: number, forceCreate = false): LeafNode {
+    const page = this.getPage(pageNum);
+    const isLeaf = Node.isLeaf(page);
+    if (!isLeaf && !forceCreate) {
+      throw new Error(`Tried to fetch leaf node from internal node ${pageNum}`);
+    }
+    return new LeafNode(page);
+  }
+
+  public getInternalNode(pageNum: number): InternalNode {
+    const page = this.getPage(pageNum);
+    if (Node.isLeaf(page)) {
+      throw new Error(`Tried to fetch internal node from leaf node ${pageNum}`);
+    }
+    return new InternalNode(page);
   }
 
   public close(): void {
@@ -70,6 +83,11 @@ export class Pager {
 
     fs.closeSync(this.fileDescriptor);
     this.pages = [];
+  }
+
+  public getUnusedPageNum(): number {
+    // TODO: recycling pages
+    return this.numPages;
   }
 
   private flushPage(pageNum: number): void {

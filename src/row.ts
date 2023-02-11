@@ -9,7 +9,7 @@ const EMAIL_OFFSET = USERNAME_OFFSET + COLUMN_USERNAME_SIZE;
 export const ROW_SIZE = ID_SIZE + COLUMN_USERNAME_SIZE + COLUMN_EMAIL_SIZE;
 
 export class Row {
-
+  static readonly SIZE = ROW_SIZE;
   id: number;
   username: string;
   email: string;

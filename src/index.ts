@@ -1,4 +1,4 @@
-import { createInterface } from 'readline';
+import { createInterface } from 'readline/promises';
 import { doMetaCommand, prepareStatement, Statement } from './commands';
 import { executeStatement } from './virtualMachine';
 import { Database } from './database';
@@ -6,10 +6,8 @@ import { Database } from './database';
 const rl = createInterface({
   input: process.stdin,
   output: process.stdout,
+  // TODO: add completer
 });
-
-const readline = (prompt = 'db> ') => new Promise<string>((resolve) => rl.question(prompt, resolve));
-
 
 async function main() {
   const dbFile = process.argv[2];
@@ -20,12 +18,13 @@ async function main() {
   });
 
   while (true) {
-    let input = (await readline()).trim();
+    let input = (await rl.question('db> ')).trim();
 
     // check for metacommands first
     if (input.startsWith('.')) {
       try {
         doMetaCommand(input, db);
+        continue;
       } catch (e) {
         console.log(`Unrecognized command ${input}.`);
         // TODO: show where the error is
