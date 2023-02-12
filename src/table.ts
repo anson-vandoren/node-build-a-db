@@ -1,6 +1,6 @@
 import { ROW_SIZE } from "./row";
 import { Pager, PAGE_SIZE } from "./pager";
-import { NodeType } from "./node";
+import { InternalNode, NodeType } from "./node";
 
 const TABLE_MAX_PAGES = 100;
 export const ROWS_PER_PAGE = Math.floor(PAGE_SIZE / ROW_SIZE);
@@ -10,7 +10,7 @@ export class Table {
   static readonly MAX_ROWS = TABLE_MAX_ROWS;
   static readonly MAX_PAGES = TABLE_MAX_PAGES;
   public pager: Pager;
-  public rootPageNum: number;
+  public readonly rootPageNum: number;
 
   constructor(pager: Pager) { 
     this.pager = pager;
@@ -29,7 +29,7 @@ export class Table {
 
   public createNewRoot(rightChildPageNum: number): void {
     const oldRoot = this.pager.getLeafNode(this.rootPageNum);
-    // const rightChild = this.pager.getLeafNode(rightChildPageNum);
+    const rightChild = this.pager.getLeafNode(rightChildPageNum);
     const leftChildPageNum = this.pager.getUnusedPageNum();
     const leftChild = this.pager.getLeafNode(leftChildPageNum, true);
     leftChild.copyFrom(oldRoot);
@@ -37,14 +37,16 @@ export class Table {
 
     // now, root should switch to internal
     oldRoot.nodeType = NodeType.INTERNAL;
-    const newRoot = this.pager.getInternalNode(this.rootPageNum);
+    const newRoot = new InternalNode(oldRoot.buf);
     
     newRoot.initialize();
     newRoot.isRoot = true;
     newRoot.numKeys = 1;
-    newRoot.setChild(0, leftChildPageNum);
+    newRoot.setChildPage(0, leftChildPageNum);
     const leftChildMaxKey = leftChild.getMaxKey();
     newRoot.setKey(0, leftChildMaxKey);
     newRoot.rightChild = rightChildPageNum;
+    leftChild.parent = this.rootPageNum;
+    rightChild.parent = this.rootPageNum;
   }
 }

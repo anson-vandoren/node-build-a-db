@@ -78,25 +78,19 @@ export class Cursor {
     }
   }
 
+  /**
+   * Return the index of the child which should contain the given key.
+   * @param table 
+   * @param pageNum 
+   * @param key 
+   * @returns 
+   */
   private static internalNodeFind(table: Table, pageNum: number, key: number): Cursor {
     const node = table.pager.getInternalNode(pageNum);
-    const numKeys = node.numKeys;
 
-    // binary search to find index of child to search
-    let minIndex = 0;
-    let maxIndex = numKeys; // one more child than key
+    const childIdx = node.findChild(key);
+    const childNum = node.getChildPage(childIdx);
 
-    while (minIndex !== maxIndex) {
-      const idx = Math.floor((minIndex + maxIndex) / 2);
-      const keyToRight = node.getKey(idx);
-      if (keyToRight >= key) {
-        maxIndex = idx;
-      } else {
-        minIndex = idx + 1;
-      }
-    }
-
-    const childNum = node.getChild(minIndex);
     const child = table.pager.getLeafNode(childNum);
     switch (child.nodeType) {
       case NodeType.LEAF:

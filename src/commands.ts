@@ -2,6 +2,7 @@ import { Row } from "./row";
 import { Database } from "./database";
 import { InternalNode, LeafNode, Node, NodeType } from "./node";
 import { Pager } from "./pager";
+import { executeStatement } from "./virtualMachine";
 
 export enum StatementType {
   STATEMENT_INSERT,
@@ -25,8 +26,25 @@ export function doMetaCommand(command: string, db: Database): void {
     case ".btree":
       printTree(db.table.pager, db.table.rootPageNum, 1);
       break;
+    case ".insert20":
+      insert(20, db);
+      break;
+    case ".insert13":
+      insert(13, db);
+      break;
     default:
       throw new Error("Unrecognized command '" + command + "'.");
+  }
+}
+
+function insert(numRows: number, db: Database): void {
+  for (let i = 0; i < numRows; i++) {
+    const row = new Row(i, `User ${i}`, 'smth@smth.com');
+    const statement: Statement = {
+      type: StatementType.STATEMENT_INSERT,
+      rowToInsert: row,
+    };
+    executeStatement(statement, db.table);
   }
 }
 
@@ -41,7 +59,7 @@ function printConstants(): void {
 
 function printTree(pager: Pager, pageNum: number, indentLevel: number): void {
   const page = pager.getPage(pageNum);
-  const nodeType = Node.nodeType(page);
+  const nodeType = Node.getNodeType(page);
 
   let node: LeafNode | InternalNode;
   switch (nodeType) {
@@ -56,11 +74,13 @@ function printTree(pager: Pager, pageNum: number, indentLevel: number): void {
       node = new InternalNode(page);
       console.log(" ".repeat(indentLevel) + `- internal (size ${node.numKeys})`);
       for (let i = 0; i < node.numKeys; i++) {
-        console.log(" ".repeat(indentLevel + 1) + `- child ${node.getChild(i)}`);
-        printTree(pager, node.getChild(i), indentLevel + 1);
+        const child = node.getChildPage(i);
+        console.log(" ".repeat(indentLevel + 1) + `- child ${child}`);
+        printTree(pager, child, indentLevel + 1);
         console.log(" ".repeat(indentLevel + 1) + `- key ${node.getKey(i)}`);
       }
       printTree(pager, node.rightChild, indentLevel + 1);
+      console.log(" ".repeat(indentLevel + 1) + `- right child`);
       break;
   }
 }

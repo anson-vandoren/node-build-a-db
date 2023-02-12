@@ -3,6 +3,8 @@ import { ROW_SIZE, Row } from "./row";
 import { Cursor } from "./cursor";
 import { Table } from "./table";
 
+const debug = console.debug
+
 export enum NodeType {
   INTERNAL = 0,
   LEAF,
@@ -57,6 +59,7 @@ const INTERNAL_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + INTERNAL_NODE_NUM_KE
 const INTERNAL_NODE_KEY_SIZE = 4;
 const INTERNAL_NODE_CHILD_SIZE = 4;
 const INTERNAL_NODE_CELL_SIZE = INTERNAL_NODE_KEY_SIZE + INTERNAL_NODE_CHILD_SIZE;
+const INTERNAL_NODE_MAX_CELLS = 3; // small for testing
 
 export class Node {
   static readonly COMMON_HEADER_SIZE = COMMON_NODE_HEADER_SIZE;
@@ -115,8 +118,12 @@ export class Node {
     throw new Error("Not implemented");
   }
 
-  public static nodeType(page: Buffer): NodeType {
+  public static getNodeType(page: Buffer): NodeType {
     return page.readUInt8(NODE_TYPE_OFFSET) as NodeType;
+  }
+
+  public static setNodeType(page: Buffer, nodeType: NodeType): void {
+    page.writeUInt8(nodeType, NODE_TYPE_OFFSET);
   }
 }
 
@@ -134,8 +141,8 @@ export class InternalNode extends Node {
     return this.page.readUInt32BE(INTERNAL_NODE_RIGHT_CHILD_OFFSET);
   }
 
-  public set rightChild(rightChild: number) {
-    this.page.writeUInt32BE(rightChild, INTERNAL_NODE_RIGHT_CHILD_OFFSET);
+  public set rightChild(pageNum: number) {
+    this.page.writeUInt32BE(pageNum, INTERNAL_NODE_RIGHT_CHILD_OFFSET);
   }
 
   constructor(from: Buffer | Node) {
@@ -146,45 +153,48 @@ export class InternalNode extends Node {
     }
   }
 
-  public setKey(keyNum: number, key: number): void {
+  public setKey(childIdx: number, key: number): void {
     const numKeys = this.numKeys;
-    if (keyNum > numKeys) {
-      throw new Error(`Tried to access keyNum ${keyNum} > numKeys ${numKeys}`);
-    } else if (keyNum === numKeys) {
-      this.numKeys++;
+    if (childIdx > numKeys) {
+      throw new Error(`Tried to access keyNum ${childIdx} > numKeys ${numKeys}`);
     }
-    this.page.writeUInt32BE(key, this.getCellOffset(keyNum) + INTERNAL_NODE_CHILD_SIZE);
+    this.page.writeUInt32BE(key, this.getCellOffset(childIdx) + INTERNAL_NODE_CHILD_SIZE);
   }
 
-  public getKey(keyNum: number): number {
+  public getKey(childIdx: number): number {
     const numKeys = this.numKeys;
-    if (keyNum > numKeys) {
-      throw new Error(`Tried to access keyNum ${keyNum} > numKeys ${numKeys}`);
+    if (childIdx > numKeys) {
+      throw new Error(`Tried to access keyNum ${childIdx} > numKeys ${numKeys}`);
     }
-    return this.page.readUInt32BE(this.getCellOffset(keyNum) + INTERNAL_NODE_CHILD_SIZE);
+    return this.page.readUInt32BE(this.getCellOffset(childIdx) + INTERNAL_NODE_CHILD_SIZE);
   }
 
-  public getChild(childNum: number): number {
+  public updateKey(oldKey: number, newKey: number): void {
+    const oldChildIdx = this.findChild(oldKey);
+    this.setKey(oldChildIdx, newKey);
+  }
+
+  public getChildPage(childIdx: number): number {
     const numKeys = this.numKeys;
-    if (childNum > numKeys) {
-      throw new Error(`Tried to access childNum ${childNum} > numKeys ${numKeys}`);
-    } else if (childNum === numKeys) {
+    if (childIdx > numKeys) {
+      throw new Error(`Tried to access childNum ${childIdx} > numKeys ${numKeys}`);
+    } else if (childIdx === numKeys) {
       return this.rightChild;
     } else {
       // for each childNum, 4 bytes for the child pointer then 4 bytes for the key
-      return this.page.readUInt32BE(this.getCellOffset(childNum));
+      return this.page.readUInt32BE(this.getCellOffset(childIdx));
     }
   }
 
-  public setChild(childNum: number, child: number): void {
+  public setChildPage(childIdx: number, childPage: number): void {
     const numKeys = this.numKeys;
-    if (childNum > numKeys) {
-      throw new Error(`Tried to access childNum ${childNum} > numKeys ${numKeys}`);
-    } else if (childNum === numKeys) {
-      this.rightChild = child;
+    if (childIdx > numKeys) {
+      throw new Error(`Tried to access childNum ${childIdx} > numKeys ${numKeys}`);
+    } else if (childIdx === numKeys) {
+      this.rightChild = childPage;
     } else {
       // for each childNum, 4 bytes for the child pointer then 4 bytes for the key
-      this.page.writeUInt32BE(child, this.getCellOffset(childNum));
+      this.page.writeUInt32BE(childPage, this.getCellOffset(childIdx));
     }
   }
 
@@ -202,6 +212,59 @@ export class InternalNode extends Node {
     this.numKeys = 0;
   }
 
+  /**
+   * Return the index of the child which should contain the given key.
+   * @param key key to search for
+   */
+  public findChild(key: number): number {
+    const numKeys = this.numKeys;
+    let minIdx = 0;
+    let maxIdx = numKeys; // there is one more child than key
+
+    while (minIdx !== maxIdx) {
+      const idx = Math.floor((minIdx + maxIdx) / 2);
+      const keyToRight = this.getKey(idx);
+      if (keyToRight >= key) {
+        maxIdx = idx;
+      } else {
+        minIdx = idx + 1;
+      }
+    }
+
+    return minIdx;
+  }
+
+  public insert(table: Table, parentPageNum: number, childPageNum: number): void {
+    const parent = table.pager.getInternalNode(parentPageNum);
+    const child = table.pager.getLeafNode(childPageNum);
+    const childMaxKey = child.getMaxKey();
+    const idx = parent.findChild(childMaxKey);
+
+    const originalNumKeys = parent.numKeys;
+    parent.numKeys++;
+    if (originalNumKeys >= INTERNAL_NODE_MAX_CELLS) {
+      throw new Error("Need to implement splitting internal node");
+    }
+
+    const rightChildPageNum = parent.rightChild;
+    const rightChild = table.pager.getLeafNode(rightChildPageNum);
+
+    if (childMaxKey > rightChild.getMaxKey()) {
+      // replace right child
+      parent.setChildPage(originalNumKeys, rightChildPageNum);
+      parent.setKey(originalNumKeys, rightChild.getMaxKey());
+      parent.rightChild = childPageNum;
+    } else {
+      // make room for the new cell
+      for (let i = originalNumKeys; i > idx; i--) {
+        const destination = parent.getCellOffset(i);
+        const source = parent.getCellOffset(i - 1);
+        parent.page.copyWithin(destination, source, source + INTERNAL_NODE_CELL_SIZE);
+      }
+      parent.setChildPage(idx, childPageNum);
+      parent.setKey(idx, childMaxKey);
+    }
+  } 
 }
 
 export class LeafNode extends Node {
@@ -296,11 +359,9 @@ export class LeafNode extends Node {
    * Update parent or create a new parent.
    */
   private splitAndInsert(cursor: Cursor, key: number, row: Row): void {
-    const newPageNum = cursor.table.pager.getUnusedPageNum();
-    const rawNode = new Node(cursor.table.pager.getPage(newPageNum));
-    rawNode.nodeType = NodeType.LEAF;
-    const newNode = new LeafNode(rawNode);
-    newNode.initialize();
+    const oldMaxKey = this.getMaxKey();
+    const { pageNum: newPageNum, node: newNode } = cursor.table.pager.getNewLeafNode();
+    newNode.parent = this.parent;
     newNode.nextLeaf = this.nextLeaf;
     this.nextLeaf = newPageNum;
 
@@ -329,7 +390,12 @@ export class LeafNode extends Node {
     if (this.isRoot) {
       return cursor.table.createNewRoot(newPageNum);
     } else {
-      throw new Error('Need to implement updating parent after split');
+      const parentPageNum = this.parent;
+      const newMaxKey = this.getMaxKey();
+      const parent = cursor.table.pager.getInternalNode(parentPageNum);
+
+      parent.updateKey(oldMaxKey, newMaxKey);
+      parent.insert(cursor.table, parentPageNum, newPageNum);
     }
   }
 

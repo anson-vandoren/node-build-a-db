@@ -1,5 +1,5 @@
 import fs from "fs";
-import { InternalNode, LeafNode, Node } from "./node";
+import { InternalNode, LeafNode, Node, NodeType } from "./node";
 import { Table } from "./table";
 
 export const PAGE_SIZE = 4096;
@@ -88,6 +88,15 @@ export class Pager {
   public getUnusedPageNum(): number {
     // TODO: recycling pages
     return this.numPages;
+  }
+
+  public getNewLeafNode(): { node: LeafNode, pageNum: number } {
+    const pageNum = this.getUnusedPageNum();
+    const page = this.getPage(pageNum);
+    Node.setNodeType(page, NodeType.LEAF);
+    const node = new LeafNode(page);
+    node.initialize();
+    return { node, pageNum };
   }
 
   private flushPage(pageNum: number): void {
