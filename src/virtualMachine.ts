@@ -2,7 +2,6 @@ import { Statement, StatementType } from "./commands";
 import { Row } from "./row";
 import { Table } from "./table";
 import { Cursor } from "./cursor";
-import { LeafNode } from "./node";
 
 export function executeStatement(statement: Statement, table: Table): void {
   switch (statement.type) {
@@ -19,12 +18,13 @@ function executeInsert(statement: Statement, table: Table): void {
   if (!statement.rowToInsert) {
     throw new Error("No row to insert");
   }
-  const node = table.pager.getLeafNode(table.rootPageNum);
-  const numCells = node.numCells;
 
   const rowToInsert = statement.rowToInsert;
   const keyToInsert = rowToInsert.id;
   const cursor = Cursor.tableFind(table, keyToInsert);
+
+  const node = table.pager.getLeafNode(cursor.pageNum);
+  const numCells = node.numCells;
 
   if (cursor.cellNum < numCells) {
     const keyAtIndex = node.getKey(cursor.cellNum);

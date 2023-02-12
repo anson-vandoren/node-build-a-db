@@ -24,7 +24,9 @@ const COMMON_NODE_HEADER_SIZE = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_S
  */
 const LEAF_NODE_NUM_CELLS_SIZE = 4;
 const LEAF_NODE_NUM_CELLS_OFFSET = COMMON_NODE_HEADER_SIZE;
-const LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE;
+const LEAF_NODE_NEXT_LEAF_SIZE = 4;
+const LEAF_NODE_NEXT_LEAF_OFFSET = LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE;
+const LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NEXT_LEAF_SIZE;
 
 /**
  * Leaf Node Body Layout
@@ -136,6 +138,14 @@ export class InternalNode extends Node {
     this.page.writeUInt32BE(rightChild, INTERNAL_NODE_RIGHT_CHILD_OFFSET);
   }
 
+  constructor(from: Buffer | Node) {
+    if (from instanceof Node) {
+      super(from.buf);
+    } else {
+      super(from);
+    }
+  }
+
   public setKey(keyNum: number, key: number): void {
     const numKeys = this.numKeys;
     if (keyNum > numKeys) {
@@ -217,10 +227,19 @@ export class LeafNode extends Node {
     this.page.writeUInt32BE(numCells, LEAF_NODE_NUM_CELLS_OFFSET);
   }
 
+  public get nextLeaf(): number {
+    return this.page.readUInt32BE(LEAF_NODE_NEXT_LEAF_OFFSET);
+  }
+
+  public set nextLeaf(nextLeaf: number) {
+    this.page.writeUInt32BE(nextLeaf, LEAF_NODE_NEXT_LEAF_OFFSET);
+  }
+
   public initialize(): void {
     this.nodeType = NodeType.LEAF;
     this.isRoot = false;
     this.numCells = 0;
+    this.nextLeaf = 0;
   }
 
   public getCellOffset(cellNum: number): number {
@@ -238,6 +257,7 @@ export class LeafNode extends Node {
   private setKey(cellNum: number, key: number): void {
     this.page.writeUInt32BE(key, this.getKeyOffset(cellNum));
   }
+
 
   public getMaxKey(): number{
     return this.getKey(this.numCells - 1);
@@ -281,6 +301,8 @@ export class LeafNode extends Node {
     rawNode.nodeType = NodeType.LEAF;
     const newNode = new LeafNode(rawNode);
     newNode.initialize();
+    newNode.nextLeaf = this.nextLeaf;
+    this.nextLeaf = newPageNum;
 
     // All existing keys plus new key should be divided
     // evenly between old (left) and new (right) nodes.

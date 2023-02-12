@@ -1,11 +1,15 @@
 import { Table } from "./table";
-import { LeafNode, NodeType, Node } from "./node";
+import { InternalNode, LeafNode, NodeType, Node } from "./node";
 
 export class Cursor {
   public table: Table;
-  private pageNum: number;
+  private _pageNum: number;
   private _cellNum: number;
   public endOfTable: boolean;
+
+  public get pageNum(): number {
+    return this._pageNum;
+  }
 
   public get cellNum(): number {
     return this._cellNum;
@@ -13,19 +17,19 @@ export class Cursor {
 
   public set cellNum(cellNum: number) {
     this._cellNum = cellNum;
-    const node = this.table.pager.getLeafNode(this.pageNum);
+    const node = this.table.pager.getLeafNode(this._pageNum);
     this.endOfTable = cellNum >= node.numCells;
   }
 
   constructor(table: Table, pageNum: number, cellNum: number, endOfTable = false) {
     this.table = table;
-    this.pageNum = pageNum;
+    this._pageNum = pageNum;
     this._cellNum = cellNum;
     this.endOfTable = endOfTable;
   }
 
   public value(): { page: Buffer; offset: number } {
-    let page = this.table.pager.getPage(this.pageNum);
+    let page = this.table.pager.getPage(this._pageNum);
     const node = new LeafNode(page);
     const offset = node.getValueOffset(this.cellNum);
     // TODO: refactor this so callers don't need a page and offset
@@ -33,25 +37,27 @@ export class Cursor {
   }
 
   public advance(): void {
-    const node = this.table.pager.getLeafNode(this.pageNum);
+    const node = this.table.pager.getLeafNode(this._pageNum);
     this.cellNum += 1;
     if (this.cellNum >= node.numCells) {
-      this.endOfTable = true;
+      const nextPageNum = node.nextLeaf;
+      if (nextPageNum === 0) {
+        // rightmost leaf
+        this.endOfTable = true;
+      } else {
+        this._pageNum = nextPageNum;
+        this.cellNum = 0;
+      }
     }
   }
 
   public static fromStart(table: Table): Cursor {
-    const pageNum = table.rootPageNum;
-    const cellNum = 0;
+    const cursor = Cursor.tableFind(table, 0);
 
-    let endOfTable = false;
-    const rootPage = table.pager.getPage(pageNum);
-    if (Node.nodeType(rootPage) === NodeType.LEAF) {
-      const rootNode = table.pager.getLeafNode(pageNum);
-      const numCells = rootNode.numCells;
-      endOfTable = numCells === 0;
-    }
-    return new Cursor(table, pageNum, cellNum, endOfTable);
+    const node = table.pager.getLeafNode(cursor._pageNum);
+    cursor.endOfTable = node.numCells === 0;
+
+    return cursor;
   }
 
   /**
@@ -60,13 +66,43 @@ export class Cursor {
    */
   public static tableFind(table: Table, key: number): Cursor {
     const rootPageNum = table.rootPageNum;
-    const rootNode = table.pager.getLeafNode(rootPageNum);
+    const rootPage = table.pager.getPage(rootPageNum);
+    const isLeaf = Node.isLeaf(rootPage);
 
-    if (rootNode.nodeType === NodeType.LEAF) {
+    if (isLeaf) {
+      const rootNode = new LeafNode(rootPage);
       const cursor = new Cursor(table, rootPageNum, 0, false);
       return rootNode.find(cursor, key);
     } else {
-      throw new Error("Need to implement searching an internal node");
+      return Cursor.internalNodeFind(table, rootPageNum, key);
+    }
+  }
+
+  private static internalNodeFind(table: Table, pageNum: number, key: number): Cursor {
+    const node = table.pager.getInternalNode(pageNum);
+    const numKeys = node.numKeys;
+
+    // binary search to find index of child to search
+    let minIndex = 0;
+    let maxIndex = numKeys; // one more child than key
+
+    while (minIndex !== maxIndex) {
+      const idx = Math.floor((minIndex + maxIndex) / 2);
+      const keyToRight = node.getKey(idx);
+      if (keyToRight >= key) {
+        maxIndex = idx;
+      } else {
+        minIndex = idx + 1;
+      }
+    }
+
+    const childNum = node.getChild(minIndex);
+    const child = table.pager.getLeafNode(childNum);
+    switch (child.nodeType) {
+      case NodeType.LEAF:
+        return child.find(new Cursor(table, childNum, 0, false), key);
+      case NodeType.INTERNAL:
+        return Cursor.internalNodeFind(table, childNum, key);
     }
   }
 }
